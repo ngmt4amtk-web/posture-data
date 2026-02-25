@@ -1,0 +1,1590 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PostureData — バイオリン姿勢計測</title>
+<style>
+/* ── CSS Variables ── */
+:root {
+  --primary: #007AFF;
+  --primary-dark: #0056CC;
+  --bg: #F2F2F7;
+  --card-bg: #FFFFFF;
+  --text: #000000;
+  --text-secondary: #3C3C43;
+  --text-tertiary: #8E8E93;
+  --separator: #C6C6C8;
+  --green: #34C759;
+  --orange: #FF9500;
+  --red: #FF3B30;
+  --cyan: #32ADE6;
+  --overlay-skeleton: rgba(50, 173, 230, 0.7);
+  --overlay-point: rgba(255, 255, 255, 0.9);
+}
+
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%; width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  overflow: hidden;
+}
+
+/* ── Screen System ── */
+.screen { display: none; flex-direction: column; height: 100%; width: 100%; position: absolute; top: 0; left: 0; }
+.screen.active { display: flex; }
+
+/* ── Common Components ── */
+.card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+.card-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 17px;
+}
+.card-body { padding: 16px; }
+
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 16px; border: none; border-radius: 12px;
+  font-size: 17px; font-weight: 600; cursor: pointer;
+  transition: transform 0.1s, opacity 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: scale(0.98); opacity: 0.9; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:disabled { background: #B0B0B0; cursor: not-allowed; }
+.btn-secondary { background: #E5E5EA; color: var(--text); }
+.btn-outline { background: transparent; color: var(--primary); border: 1.5px solid var(--primary); }
+
+.badge {
+  font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 99px;
+}
+.badge-blue { background: #E8F0FE; color: var(--primary); }
+
+/* ── Screen 1: Mode Selection ── */
+#screenMode {
+  padding: 0 20px;
+  justify-content: center;
+  gap: 16px;
+}
+#screenMode .title-area {
+  text-align: center;
+  padding: 40px 0 20px;
+}
+#screenMode h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+#screenMode .subtitle { color: var(--text-tertiary); font-size: 15px; margin-top: 8px; line-height: 1.5; }
+
+.mode-card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex; align-items: center; gap: 20px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  -webkit-tap-highlight-color: transparent;
+}
+.mode-card:active { border-color: var(--primary); box-shadow: 0 2px 12px rgba(0,122,255,0.15); }
+.mode-card .icon-area {
+  width: 64px; height: 64px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.mode-card .icon-area svg { width: 56px; height: 56px; }
+.mode-card .info h3 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+.mode-card .info p { font-size: 13px; color: var(--text-tertiary); line-height: 1.4; }
+.mode-card .info .mode-badge {
+  display: inline-block; margin-top: 8px;
+  font-size: 12px; font-weight: 500; padding: 3px 10px;
+  border-radius: 99px;
+}
+.mode-card .info .mode-badge.simple { background: #E8F5E9; color: #2E7D32; }
+.mode-card .info .mode-badge.thorough { background: #E3F2FD; color: #1565C0; }
+
+/* ── Screen 2: Settings ── */
+#screenSettings {
+  padding: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.settings-header {
+  padding: 56px 24px 16px;
+}
+.settings-header h1 { font-size: 28px; font-weight: 700; }
+.settings-header p { color: var(--text-tertiary); font-size: 15px; margin-top: 6px; }
+
+.settings-content { padding: 0 16px 120px; display: flex; flex-direction: column; gap: 16px; }
+
+/* Wheel Picker */
+.wheel-picker-container {
+  position: relative;
+  height: 200px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom,
+    transparent 0%, rgba(0,0,0,0.3) 15%, black 35%, black 65%, rgba(0,0,0,0.3) 85%, transparent 100%);
+  mask-image: linear-gradient(to bottom,
+    transparent 0%, rgba(0,0,0,0.3) 15%, black 35%, black 65%, rgba(0,0,0,0.3) 85%, transparent 100%);
+}
+.wheel-picker-highlight {
+  position: absolute;
+  top: 50%; left: 0; right: 0;
+  height: 40px; transform: translateY(-50%);
+  background: rgba(0,122,255,0.06);
+  border-top: 1px solid var(--separator);
+  border-bottom: 1px solid var(--separator);
+  pointer-events: none;
+  z-index: 1;
+}
+.wheel-picker-list {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  will-change: transform;
+  transition: transform 0.1s ease-out;
+}
+.wheel-picker-item {
+  height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 400;
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.wheel-picker-item.selected { font-weight: 600; color: var(--primary); }
+.wheel-picker-unit {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin-top: 8px;
+}
+
+/* Segment Control */
+.segment-control {
+  display: flex;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 2px;
+  position: relative;
+}
+.segment-control .slider {
+  position: absolute;
+  top: 2px; bottom: 2px;
+  width: calc(50% - 2px);
+  background: var(--card-bg);
+  border-radius: 7px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transition: left 0.25s ease;
+  left: 2px;
+}
+.segment-control.right .slider { left: calc(50%); }
+.segment-control button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  transition: opacity 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.segment-control button.active { opacity: 1; color: var(--text); }
+.segment-control button .rec-label {
+  display: block; font-size: 10px; font-weight: 400; color: var(--green); margin-top: 2px;
+}
+
+.side-description {
+  margin-top: 12px;
+  padding: 12px;
+  background: #F8F8FA;
+  border-radius: 8px;
+  display: flex; align-items: flex-start; gap: 10px;
+}
+.side-description .info-icon { color: var(--text-tertiary); font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.side-description p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+
+.settings-bottom {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  padding: 16px 20px 32px;
+  background: linear-gradient(transparent, var(--bg) 20%);
+  z-index: 10;
+}
+
+/* ── Screen 3: Measurement ── */
+#screenMeasure {
+  background: #000;
+  position: relative;
+}
+.camera-container {
+  flex: 1; position: relative; overflow: hidden;
+}
+.camera-container video {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.camera-container video.mirror { transform: scaleX(-1); }
+.camera-container canvas {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+.camera-container canvas.mirror { transform: scaleX(-1); }
+
+.measure-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.countdown-number {
+  font-size: 120px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.9);
+  text-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.countdown-number.visible { opacity: 1; }
+
+.countdown-label {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.7);
+  margin-top: 12px;
+}
+
+.measure-progress {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 4px; background: rgba(255,255,255,0.2);
+}
+.measure-progress-bar {
+  height: 100%; background: var(--primary);
+  width: 0; transition: width 0.1s linear;
+}
+
+.measure-status {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: 52px 16px 12px;
+  background: linear-gradient(rgba(0,0,0,0.5), transparent);
+  display: flex; align-items: center; justify-content: space-between;
+  z-index: 11;
+}
+.measure-status .status-left { display: flex; align-items: center; gap: 8px; }
+.measure-status .status-badge {
+  font-size: 12px; font-weight: 600; color: #fff;
+  padding: 4px 10px; border-radius: 99px;
+}
+.measure-status .status-badge.loading { background: var(--orange); }
+.measure-status .status-badge.ready { background: var(--green); }
+.measure-status .status-badge.recording { background: var(--red); animation: pulse 1s infinite; }
+.measure-status .fps-badge {
+  font-size: 11px; color: rgba(255,255,255,0.7);
+  padding: 2px 6px; background: rgba(0,0,0,0.4); border-radius: 4px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.landmark-count {
+  font-size: 13px; color: rgba(255,255,255,0.8);
+}
+
+.measure-bottom-controls {
+  position: absolute; bottom: 24px; left: 0; right: 0;
+  display: flex; justify-content: center; gap: 16px;
+  z-index: 11;
+  pointer-events: auto;
+}
+.measure-bottom-controls .btn {
+  width: auto; padding: 12px 32px;
+  border-radius: 99px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+
+/* Side switch screen */
+.side-switch-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85);
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 20; gap: 24px; padding: 40px;
+}
+.side-switch-overlay.visible { display: flex; }
+.side-switch-overlay h2 { color: #fff; font-size: 24px; text-align: center; }
+.side-switch-overlay p { color: rgba(255,255,255,0.7); font-size: 15px; text-align: center; line-height: 1.6; }
+.side-switch-overlay .btn { width: auto; padding: 14px 40px; }
+
+/* Camera toggle */
+.camera-toggle-btn {
+  position: absolute; top: 52px; right: 16px;
+  width: 40px; height: 40px;
+  background: rgba(0,0,0,0.4); border: none; border-radius: 50%;
+  color: #fff; font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 11;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Screen 4: Export ── */
+#screenExport {
+  padding: 0 20px;
+  justify-content: center;
+  gap: 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.export-header {
+  text-align: center;
+  padding: 56px 0 12px;
+}
+.export-header .check-icon {
+  width: 64px; height: 64px;
+  background: var(--green);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 16px;
+}
+.export-header .check-icon svg { width: 32px; height: 32px; fill: #fff; }
+.export-header h1 { font-size: 24px; font-weight: 700; }
+.export-header p { font-size: 14px; color: var(--text-tertiary); margin-top: 6px; }
+
+.export-stats {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+  padding: 0 4px;
+}
+.export-stat {
+  background: var(--card-bg);
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+}
+.export-stat .value { font-size: 20px; font-weight: 700; color: var(--primary); }
+.export-stat .label { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+
+.export-buttons { display: flex; flex-direction: column; gap: 12px; padding: 0 4px; }
+
+.export-btn-info { font-size: 12px; color: var(--text-tertiary); text-align: center; margin-top: -4px; }
+
+/* ── Loading Screen ── */
+#screenLoading {
+  background: var(--bg);
+  align-items: center; justify-content: center; gap: 16px;
+}
+#screenLoading .spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--separator);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#screenLoading .loading-text { font-size: 15px; color: var(--text-secondary); text-align: center; }
+
+/* ── Utility ── */
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ============ Screen: Loading ============ -->
+<div class="screen active" id="screenLoading">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">MediaPipe を読み込み中...</div>
+</div>
+
+<!-- ============ Screen 1: Mode Selection ============ -->
+<div class="screen" id="screenMode">
+  <div class="title-area">
+    <h1>PostureData</h1>
+    <p class="subtitle">バイオリン姿勢を計測して<br>データをtxtで出力します</p>
+  </div>
+
+  <div class="mode-card" id="btnSimple">
+    <div class="icon-area">
+      <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" color="#007AFF">
+        <circle cx="32" cy="14" r="6"/>
+        <line x1="32" y1="20" x2="32" y2="42"/>
+        <line x1="20" y1="30" x2="44" y2="30"/>
+        <line x1="32" y1="42" x2="22" y2="58"/>
+        <line x1="32" y1="42" x2="42" y2="58"/>
+      </svg>
+    </div>
+    <div class="info">
+      <h3>簡易</h3>
+      <p>正面のみ・15秒<br>サクッと計測したいとき</p>
+      <span class="mode-badge simple">Quick</span>
+    </div>
+  </div>
+
+  <div class="mode-card" id="btnThorough">
+    <div class="icon-area">
+      <svg viewBox="0 0 80 64" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" color="#007AFF">
+        <circle cx="24" cy="14" r="6"/>
+        <line x1="24" y1="20" x2="24" y2="42"/>
+        <line x1="12" y1="30" x2="36" y2="30"/>
+        <line x1="24" y1="42" x2="14" y2="58"/>
+        <line x1="24" y1="42" x2="34" y2="58"/>
+        <circle cx="58" cy="14" r="6"/>
+        <line x1="58" y1="20" x2="58" y2="42"/>
+        <line x1="52" y1="28" x2="64" y2="32"/>
+        <line x1="58" y1="42" x2="48" y2="58"/>
+        <line x1="58" y1="42" x2="68" y2="58"/>
+        <text x="41" y="40" font-size="16" fill="#007AFF" stroke="none" font-weight="600">+</text>
+      </svg>
+    </div>
+    <div class="info">
+      <h3>しっかり</h3>
+      <p>正面＋側面・30秒<br>詳しく分析したいとき</p>
+      <span class="mode-badge thorough">Thorough</span>
+    </div>
+  </div>
+
+  <p style="text-align:center; font-size:12px; color:var(--text-tertiary); padding: 8px 0 24px;">
+    計測データをAIに渡して姿勢の相談ができます
+  </p>
+</div>
+
+<!-- ============ Screen 2: Settings ============ -->
+<div class="screen" id="screenSettings">
+  <div class="settings-header">
+    <h1>設定</h1>
+    <p>計測の準備をします</p>
+  </div>
+
+  <div class="settings-content">
+    <!-- Height Picker -->
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:20px;">📏</span>
+        <span>身長</span>
+      </div>
+      <div class="card-body">
+        <div class="wheel-picker-container" id="heightPicker">
+          <div class="wheel-picker-highlight"></div>
+          <div class="wheel-picker-list" id="heightPickerList"></div>
+        </div>
+        <div class="wheel-picker-unit">cm</div>
+      </div>
+    </div>
+
+    <!-- Side Selection (thorough only) -->
+    <div class="card" id="sideSelectionCard" style="display:none;">
+      <div class="card-header">
+        <span style="font-size:20px;">📐</span>
+        <span>側面撮影の向き</span>
+        <span class="badge badge-blue" style="margin-left:auto;">しっかりモード</span>
+      </div>
+      <div class="card-body">
+        <p style="font-size:14px; color:var(--text-secondary); margin-bottom:12px;">
+          側面撮影時にどちら側を撮影しますか？
+        </p>
+        <div class="segment-control" id="sideSegment">
+          <div class="slider"></div>
+          <button class="active" id="btnSideLeft">
+            左側面
+            <span class="rec-label">おすすめ</span>
+          </button>
+          <button id="btnSideRight">右側面</button>
+        </div>
+        <div class="side-description" id="sideDescription">
+          <span class="info-icon">ℹ️</span>
+          <p id="sideDescText">スクロール（楽器の渦巻き）側。指板腕の肘角度・手首の形、楽器の構え角度がよく見えます</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-bottom">
+    <button class="btn btn-primary" id="btnStartMeasure">計測開始</button>
+  </div>
+</div>
+
+<!-- ============ Screen 3: Measurement ============ -->
+<div class="screen" id="screenMeasure">
+  <div class="camera-container">
+    <video id="video" playsinline autoplay muted></video>
+    <canvas id="overlay"></canvas>
+  </div>
+
+  <div class="measure-status">
+    <div class="status-left">
+      <span class="status-badge loading" id="statusBadge">準備中</span>
+      <span class="fps-badge" id="fpsBadge">-- FPS</span>
+    </div>
+    <span class="landmark-count" id="landmarkCount">--/13</span>
+  </div>
+
+  <button class="camera-toggle-btn" id="btnCameraToggle">🔄</button>
+
+  <div class="measure-overlay" id="measureOverlay">
+    <div class="countdown-number" id="countdownNumber"></div>
+    <div class="countdown-label" id="countdownLabel"></div>
+  </div>
+
+  <div class="measure-progress" id="measureProgress" style="display:none;">
+    <div class="measure-progress-bar" id="measureProgressBar"></div>
+  </div>
+
+  <div class="measure-bottom-controls" id="measureControls">
+    <button class="btn btn-primary" id="btnBeginMeasure" disabled>計測開始</button>
+  </div>
+
+  <!-- Side switch overlay -->
+  <div class="side-switch-overlay" id="sideSwitchOverlay">
+    <h2>側面撮影に切り替え</h2>
+    <p id="sideSwitchText">カメラを横に移動して、左側面が映るようにしてください</p>
+    <button class="btn btn-primary" id="btnSideReady">準備できた</button>
+  </div>
+</div>
+
+<!-- ============ Screen 4: Export ============ -->
+<div class="screen" id="screenExport">
+  <div class="export-header">
+    <div class="check-icon">
+      <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+    </div>
+    <h1>計測完了</h1>
+    <p id="exportSummaryText">簡易モード・15秒間</p>
+  </div>
+
+  <div class="export-stats" id="exportStats">
+    <div class="export-stat">
+      <div class="value" id="statFrames">0</div>
+      <div class="label">フレーム</div>
+    </div>
+    <div class="export-stat">
+      <div class="value" id="statMetrics">0</div>
+      <div class="label">指標</div>
+    </div>
+    <div class="export-stat">
+      <div class="value" id="statFps">0</div>
+      <div class="label">平均FPS</div>
+    </div>
+  </div>
+
+  <div class="export-buttons">
+    <button class="btn btn-primary" id="btnExportSimple">📄 簡易エクスポート</button>
+    <p class="export-btn-info">サマリーのみ — AI相談・縦断比較に</p>
+    <button class="btn btn-outline" id="btnExportDetail">📊 詳細エクスポート</button>
+    <p class="export-btn-info">全フレームデータ — 詳細分析・研究に</p>
+    <button class="btn btn-secondary" id="btnRetry" style="margin-top:8px;">もう一度計測する</button>
+  </div>
+</div>
+
+<script type="module">
+// ══════════════════════════════════════════════════
+//  PostureData — Main Application Script
+// ══════════════════════════════════════════════════
+
+import {
+  PoseLandmarker,
+  FilesetResolver,
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs";
+
+// ── Constants ──
+const VISION_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm';
+const MODEL_FULL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
+const MODEL_LITE = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task';
+
+const EMA_ALPHA = 0.3;
+const MEASURE_DURATION = 15;
+const COUNTDOWN_DURATION = 5;
+const VISIBILITY_THRESHOLD = 0.3;
+
+// Landmark indices
+const LM = {
+  NOSE: 0, L_EAR: 7, R_EAR: 8,
+  L_SHOULDER: 11, R_SHOULDER: 12,
+  L_ELBOW: 13, R_ELBOW: 14,
+  L_WRIST: 15, R_WRIST: 16,
+  L_INDEX: 19, R_INDEX: 20,
+  L_HIP: 23, R_HIP: 24,
+};
+const TRACKED_INDICES = [0, 7, 8, 11, 12, 13, 14, 15, 16, 19, 20, 23, 24];
+const TRACKED_NAMES = ['nose','l_ear','r_ear','l_shoulder','r_shoulder','l_elbow','r_elbow','l_wrist','r_wrist','l_index','r_index','l_hip','r_hip'];
+
+// Skeleton connections for drawing
+const SKELETON_CONNECTIONS = [
+  [LM.L_EAR, LM.NOSE], [LM.R_EAR, LM.NOSE],
+  [LM.L_SHOULDER, LM.R_SHOULDER],
+  [LM.L_SHOULDER, LM.L_ELBOW], [LM.L_ELBOW, LM.L_WRIST], [LM.L_WRIST, LM.L_INDEX],
+  [LM.R_SHOULDER, LM.R_ELBOW], [LM.R_ELBOW, LM.R_WRIST], [LM.R_WRIST, LM.R_INDEX],
+  [LM.L_SHOULDER, LM.L_HIP], [LM.R_SHOULDER, LM.R_HIP],
+  [LM.L_HIP, LM.R_HIP],
+];
+
+// Front metric keys
+const FRONT_METRIC_KEYS = [
+  'head_lateral_tilt','head_rotation','l_shoulder_elevation','shoulder_asymmetry',
+  'r_elbow_angle','l_elbow_angle','l_wrist_deviation',
+  'trunk_lateral_tilt','pelvic_tilt','instrument_angle'
+];
+// Side metric keys
+const SIDE_METRIC_KEYS = [
+  'head_forward_displacement','shoulder_protraction','thoracic_kyphosis',
+  'lumbar_lordosis','bow_arm_sagittal'
+];
+
+// ── State ──
+let poseLandmarker = null;
+let delegate = '';
+let stream = null;
+let facingMode = 'environment';
+let isDetecting = false;
+let lastVideoTime = -1;
+let frameCount = 0;
+let fpsTime = 0;
+let currentFps = 0;
+
+let appMode = 'simple'; // 'simple' | 'thorough'
+let selectedSide = 'left';
+let selectedHeight = 160;
+let measurePhase = 'idle'; // 'idle' | 'position' | 'countdown' | 'measuring' | 'side-switch' | 'side-position' | 'side-countdown' | 'side-measuring' | 'done'
+let countdownTimer = null;
+let measureStartTime = 0;
+
+// EMA state
+let emaLandmarks = null;
+
+// Frame buffers
+let frontFrames = [];
+let sideFrames = [];
+
+// Confidence accumulators
+let confidenceAccum = {};
+
+// ── DOM References ──
+const $ = id => document.getElementById(id);
+const video = $('video');
+const overlay = $('overlay');
+const ctx = overlay.getContext('2d');
+
+// ── Utility Functions ──
+function rad2deg(r) { return r * 180 / Math.PI; }
+
+function distance(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function angleBetween3(a, b, c) {
+  const ba = { x: a.x - b.x, y: a.y - b.y };
+  const bc = { x: c.x - b.x, y: c.y - b.y };
+  const dot = ba.x * bc.x + ba.y * bc.y;
+  const magBA = Math.sqrt(ba.x * ba.x + ba.y * ba.y);
+  const magBC = Math.sqrt(bc.x * bc.x + bc.y * bc.y);
+  if (magBA === 0 || magBC === 0) return null;
+  return rad2deg(Math.acos(Math.max(-1, Math.min(1, dot / (magBA * magBC)))));
+}
+
+function ema(prev, curr) {
+  if (prev === null || prev === undefined) return curr;
+  return prev + EMA_ALPHA * (curr - prev);
+}
+
+function isVisible(lm, idx) {
+  return lm[idx] && (lm[idx].visibility || 0) >= VISIBILITY_THRESHOLD;
+}
+
+function getLm(lm, idx) {
+  return lm[idx] || { x: 0, y: 0, z: 0, visibility: 0 };
+}
+
+// ── Angle Calculation Engine ──
+function calcFrontMetrics(lm) {
+  const m = {};
+  const nose = getLm(lm, LM.NOSE);
+  const lEar = getLm(lm, LM.L_EAR), rEar = getLm(lm, LM.R_EAR);
+  const lSh = getLm(lm, LM.L_SHOULDER), rSh = getLm(lm, LM.R_SHOULDER);
+  const lEl = getLm(lm, LM.L_ELBOW), rEl = getLm(lm, LM.R_ELBOW);
+  const lWr = getLm(lm, LM.L_WRIST), rWr = getLm(lm, LM.R_WRIST);
+  const lIdx = getLm(lm, LM.L_INDEX), rIdx = getLm(lm, LM.R_INDEX);
+  const lHip = getLm(lm, LM.L_HIP), rHip = getLm(lm, LM.R_HIP);
+
+  // F1: Head lateral tilt
+  if (isVisible(lm, LM.L_EAR) && isVisible(lm, LM.R_EAR)) {
+    const dy = lEar.y - rEar.y;
+    const dx = rEar.x - lEar.x;
+    m.head_lateral_tilt = rad2deg(Math.atan2(dy, dx));
+  }
+
+  // F2: Head rotation
+  if (isVisible(lm, LM.NOSE) && isVisible(lm, LM.L_EAR) && isVisible(lm, LM.R_EAR)) {
+    const noseToL = distance(nose, lEar);
+    const noseToR = distance(nose, rEar);
+    if (noseToL > 0 && noseToR > 0) {
+      m.head_rotation = ((noseToR - noseToL) / (noseToR + noseToL)) * 100;
+    }
+  }
+
+  // F3: L shoulder elevation (needs hips)
+  if (isVisible(lm, LM.L_SHOULDER) && isVisible(lm, LM.R_SHOULDER) && isVisible(lm, LM.L_HIP) && isVisible(lm, LM.R_HIP)) {
+    const shMidY = (lSh.y + rSh.y) / 2;
+    const hipMidY = (lHip.y + rHip.y) / 2;
+    const trunkH = Math.abs(hipMidY - shMidY);
+    if (trunkH > 0.01) {
+      m.l_shoulder_elevation = ((shMidY - lSh.y) / trunkH) * 100;
+    }
+  }
+
+  // F4: Shoulder asymmetry
+  if (isVisible(lm, LM.L_SHOULDER) && isVisible(lm, LM.R_SHOULDER)) {
+    const dy = lSh.y - rSh.y;
+    const dx = rSh.x - lSh.x;
+    m.shoulder_asymmetry = rad2deg(Math.atan2(dy, dx));
+  }
+
+  // F5: R elbow angle (bow arm)
+  if (isVisible(lm, LM.R_SHOULDER) && isVisible(lm, LM.R_ELBOW) && isVisible(lm, LM.R_WRIST)) {
+    m.r_elbow_angle = angleBetween3(rSh, rEl, rWr);
+  }
+
+  // F6: L elbow angle (fingerboard arm)
+  if (isVisible(lm, LM.L_SHOULDER) && isVisible(lm, LM.L_ELBOW) && isVisible(lm, LM.L_WRIST)) {
+    m.l_elbow_angle = angleBetween3(lSh, lEl, lWr);
+  }
+
+  // F7: L wrist deviation
+  if (isVisible(lm, LM.L_ELBOW) && isVisible(lm, LM.L_WRIST) && isVisible(lm, LM.L_INDEX)) {
+    m.l_wrist_deviation = angleBetween3(lEl, lWr, lIdx);
+  }
+
+  // F8: Trunk lateral tilt (needs hips)
+  if (isVisible(lm, LM.L_SHOULDER) && isVisible(lm, LM.R_SHOULDER) && isVisible(lm, LM.L_HIP) && isVisible(lm, LM.R_HIP)) {
+    const shMidX = (lSh.x + rSh.x) / 2, shMidY = (lSh.y + rSh.y) / 2;
+    const hipMidX = (lHip.x + rHip.x) / 2, hipMidY = (lHip.y + rHip.y) / 2;
+    m.trunk_lateral_tilt = rad2deg(Math.atan2(shMidX - hipMidX, hipMidY - shMidY));
+  }
+
+  // F9: Pelvic tilt
+  if (isVisible(lm, LM.L_HIP) && isVisible(lm, LM.R_HIP)) {
+    const dy = lHip.y - rHip.y;
+    const dx = rHip.x - lHip.x;
+    m.pelvic_tilt = rad2deg(Math.atan2(dy, dx));
+  }
+
+  // F10: Instrument angle
+  if (isVisible(lm, LM.L_SHOULDER) && isVisible(lm, LM.L_WRIST) && isVisible(lm, LM.L_INDEX)) {
+    // Angle of the line from wrist to index finger relative to horizontal
+    const dx = lIdx.x - lWr.x;
+    const dy = lIdx.y - lWr.y;
+    m.instrument_angle = rad2deg(Math.atan2(dy, dx));
+  }
+
+  return m;
+}
+
+function calcSideMetrics(lm) {
+  const m = {};
+  const ear = isVisible(lm, LM.L_EAR) ? getLm(lm, LM.L_EAR) : getLm(lm, LM.R_EAR);
+  const sh = isVisible(lm, LM.L_SHOULDER) ? getLm(lm, LM.L_SHOULDER) : getLm(lm, LM.R_SHOULDER);
+  const hip = isVisible(lm, LM.L_HIP) ? getLm(lm, LM.L_HIP) : getLm(lm, LM.R_HIP);
+  const rEl = getLm(lm, LM.R_ELBOW);
+  const rWr = getLm(lm, LM.R_WRIST);
+
+  const earVis = isVisible(lm, LM.L_EAR) || isVisible(lm, LM.R_EAR);
+  const shVis = isVisible(lm, LM.L_SHOULDER) || isVisible(lm, LM.R_SHOULDER);
+  const hipVis = isVisible(lm, LM.L_HIP) || isVisible(lm, LM.R_HIP);
+
+  // S1: Head forward displacement (CVA)
+  if (earVis && shVis) {
+    m.head_forward_displacement = rad2deg(Math.atan2(sh.y - ear.y, Math.abs(ear.x - sh.x)));
+  }
+
+  // S2: Shoulder protraction
+  if (shVis && hipVis) {
+    m.shoulder_protraction = (sh.x - hip.x) * 100; // normalized
+  }
+
+  // S3: Thoracic kyphosis
+  if (shVis && hipVis) {
+    const dx = sh.x - hip.x;
+    const dy = hip.y - sh.y;
+    m.thoracic_kyphosis = rad2deg(Math.atan2(Math.abs(dx), dy));
+  }
+
+  // S4: Lumbar lordosis
+  if (hipVis && shVis) {
+    // Estimate based on hip-shoulder alignment in sagittal plane
+    m.lumbar_lordosis = rad2deg(Math.atan2(hip.x - sh.x, hip.y - sh.y)) + 90;
+  }
+
+  // S5: Bow arm sagittal
+  if (isVisible(lm, LM.R_ELBOW) && isVisible(lm, LM.R_WRIST)) {
+    const dx = rWr.x - rEl.x;
+    const dy = rWr.y - rEl.y;
+    m.bow_arm_sagittal = rad2deg(Math.atan2(dy, dx));
+  }
+
+  return m;
+}
+
+// ── EMA Smoothing for Landmarks ──
+function smoothLandmarks(rawLm) {
+  if (!emaLandmarks) {
+    emaLandmarks = rawLm.map(p => ({ x: p.x, y: p.y, z: p.z, visibility: p.visibility }));
+    return emaLandmarks;
+  }
+  emaLandmarks = rawLm.map((p, i) => ({
+    x: ema(emaLandmarks[i]?.x, p.x),
+    y: ema(emaLandmarks[i]?.y, p.y),
+    z: ema(emaLandmarks[i]?.z, p.z),
+    visibility: p.visibility,
+  }));
+  return emaLandmarks;
+}
+
+// ── Statistics ──
+function calcStats(values) {
+  const filtered = values.filter(v => v !== null && v !== undefined);
+  if (filtered.length === 0) return null;
+  const n = filtered.length;
+  const avg = filtered.reduce((a, b) => a + b, 0) / n;
+  const sd = Math.sqrt(filtered.reduce((s, v) => s + (v - avg) ** 2, 0) / n);
+  const min = Math.min(...filtered);
+  const max = Math.max(...filtered);
+  return { avg: +avg.toFixed(1), sd: +sd.toFixed(1), min: +min.toFixed(1), max: +max.toFixed(1) };
+}
+
+// ── Visible Range Detection ──
+function detectVisibleRange(frames) {
+  if (frames.length === 0) return 'unknown';
+  let hipVisible = 0;
+  for (const f of frames) {
+    const lhVis = f.landmarks[TRACKED_INDICES.indexOf(LM.L_HIP)]?.visibility || 0;
+    const rhVis = f.landmarks[TRACKED_INDICES.indexOf(LM.R_HIP)]?.visibility || 0;
+    if (lhVis >= VISIBILITY_THRESHOLD || rhVis >= VISIBILITY_THRESHOLD) hipVisible++;
+  }
+  return (hipVisible / frames.length) >= 0.5 ? 'full_body' : 'upper_body';
+}
+
+// ── Drawing ──
+function drawSkeleton(lm) {
+  const w = overlay.width, h = overlay.height;
+  ctx.clearRect(0, 0, w, h);
+  if (!lm || lm.length === 0) return;
+
+  // Connections
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = 'rgba(50, 173, 230, 0.7)';
+  for (const [si, ei] of SKELETON_CONNECTIONS) {
+    const s = lm[si], e = lm[ei];
+    if ((s.visibility || 0) < VISIBILITY_THRESHOLD || (e.visibility || 0) < VISIBILITY_THRESHOLD) continue;
+    ctx.beginPath();
+    ctx.moveTo(s.x * w, s.y * h);
+    ctx.lineTo(e.x * w, e.y * h);
+    ctx.stroke();
+  }
+
+  // Points
+  for (const idx of TRACKED_INDICES) {
+    const p = lm[idx];
+    if ((p.visibility || 0) < VISIBILITY_THRESHOLD) continue;
+    ctx.beginPath();
+    ctx.arc(p.x * w, p.y * h, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
+// ── Frame Processing ──
+function processFrame(rawLm, timestamp) {
+  const lm = smoothLandmarks(rawLm);
+
+  // Count visible tracked landmarks
+  let visCount = 0;
+  for (const idx of TRACKED_INDICES) {
+    if (isVisible(lm, idx)) visCount++;
+  }
+  $('landmarkCount').textContent = `${visCount}/13`;
+
+  // Enable start button when enough landmarks visible
+  if (measurePhase === 'position' || measurePhase === 'side-position') {
+    $('btnBeginMeasure').disabled = visCount < 5;
+  }
+
+  // Accumulate confidence
+  for (let i = 0; i < TRACKED_INDICES.length; i++) {
+    const idx = TRACKED_INDICES[i];
+    const name = TRACKED_NAMES[i];
+    if (!confidenceAccum[name]) confidenceAccum[name] = { vis: [], pres: [] };
+    confidenceAccum[name].vis.push(lm[idx]?.visibility || 0);
+    // MediaPipe worldLandmarks have no separate "presence" in web API, use visibility
+    confidenceAccum[name].pres.push(lm[idx]?.visibility || 0);
+  }
+
+  // Record frame during measurement
+  if (measurePhase === 'measuring' || measurePhase === 'side-measuring') {
+    const isSide = measurePhase === 'side-measuring';
+    const metrics = isSide ? calcSideMetrics(lm) : calcFrontMetrics(lm);
+
+    const frameData = {
+      timestamp,
+      landmarks: TRACKED_INDICES.map(idx => ({
+        x: +(lm[idx].x).toFixed(5),
+        y: +(lm[idx].y).toFixed(5),
+        z: +(lm[idx].z).toFixed(5),
+        visibility: +(lm[idx].visibility || 0).toFixed(3),
+      })),
+      metrics,
+    };
+
+    if (isSide) {
+      sideFrames.push(frameData);
+    } else {
+      frontFrames.push(frameData);
+    }
+  }
+
+  drawSkeleton(lm);
+}
+
+// ── Detection Loop ──
+function detectLoop() {
+  if (!isDetecting) return;
+  requestAnimationFrame(detectLoop);
+  if (!poseLandmarker || video.readyState < 2) return;
+
+  const t = video.currentTime;
+  if (t === lastVideoTime) return;
+  lastVideoTime = t;
+
+  const ts = performance.now();
+  let result;
+  try {
+    result = poseLandmarker.detectForVideo(video, ts);
+  } catch (e) {
+    return;
+  }
+
+  frameCount++;
+  if (ts - fpsTime >= 1000) {
+    currentFps = frameCount;
+    frameCount = 0;
+    fpsTime = ts;
+    $('fpsBadge').textContent = currentFps + ' FPS';
+  }
+
+  if (result.landmarks && result.landmarks.length > 0) {
+    processFrame(result.landmarks[0], ts);
+  } else {
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    $('landmarkCount').textContent = '0/13';
+    if (measurePhase === 'position' || measurePhase === 'side-position') {
+      $('btnBeginMeasure').disabled = true;
+    }
+  }
+}
+
+// ── Camera ──
+async function startCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+    video.srcObject = stream;
+    const isMirror = facingMode === 'user';
+    video.classList.toggle('mirror', isMirror);
+    overlay.classList.toggle('mirror', isMirror);
+
+    await new Promise(r => video.addEventListener('loadeddata', r, { once: true }));
+    overlay.width = video.videoWidth;
+    overlay.height = video.videoHeight;
+  } catch (e) {
+    alert('カメラにアクセスできません: ' + e.message);
+  }
+}
+
+// ── MediaPipe Init ──
+async function initMediaPipe() {
+  try {
+    $('loadingText').textContent = 'WASM ランタイムを読み込み中...';
+    const vision = await FilesetResolver.forVisionTasks(VISION_CDN);
+    $('loadingText').textContent = 'GPU で姿勢推定モデルを読み込み中...';
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: MODEL_FULL, delegate: 'GPU' },
+      runningMode: 'VIDEO',
+      numPoses: 1,
+      minPoseDetectionConfidence: 0.15,
+      minPosePresenceConfidence: 0.15,
+      minTrackingConfidence: 0.15,
+    });
+    delegate = 'GPU';
+  } catch (e) {
+    console.warn('GPU failed:', e);
+    try {
+      $('loadingText').textContent = 'CPU モードで再試行中...';
+      const vision = await FilesetResolver.forVisionTasks(VISION_CDN);
+      poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: MODEL_LITE, delegate: 'CPU' },
+        runningMode: 'VIDEO',
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.5,
+        minPosePresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+      delegate = 'CPU';
+    } catch (e2) {
+      $('loadingText').textContent = 'エラー: ' + e2.message;
+      return;
+    }
+  }
+  navigateTo('mode');
+}
+
+// ── Navigation ──
+function navigateTo(screen) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const map = { loading: 'screenLoading', mode: 'screenMode', settings: 'screenSettings', measure: 'screenMeasure', export: 'screenExport' };
+  $(map[screen]).classList.add('active');
+}
+
+// ── Wheel Picker ──
+function initWheelPicker() {
+  const container = $('heightPicker');
+  const list = $('heightPickerList');
+  const minVal = 100, maxVal = 200;
+  const itemH = 40;
+  const padding = 80; // space above/below for centering
+
+  // Build items
+  list.innerHTML = '';
+  for (let v = minVal; v <= maxVal; v++) {
+    const div = document.createElement('div');
+    div.className = 'wheel-picker-item';
+    div.textContent = v;
+    div.dataset.value = v;
+    list.appendChild(div);
+  }
+
+  const totalItems = maxVal - minVal + 1;
+  let currentIndex = selectedHeight - minVal;
+  let offset = -(currentIndex * itemH) + padding;
+
+  function updatePosition(animated) {
+    list.style.transition = animated ? 'transform 0.3s cubic-bezier(0.2, 0.8, 0.3, 1)' : 'none';
+    list.style.transform = `translateY(${offset}px)`;
+
+    // Highlight selected
+    const items = list.children;
+    for (let i = 0; i < items.length; i++) {
+      items[i].classList.toggle('selected', i === currentIndex);
+    }
+    selectedHeight = currentIndex + minVal;
+  }
+
+  function snapToNearest() {
+    currentIndex = Math.round((-offset + padding) / itemH);
+    currentIndex = Math.max(0, Math.min(totalItems - 1, currentIndex));
+    offset = -(currentIndex * itemH) + padding;
+    updatePosition(true);
+  }
+
+  // Touch events
+  let startY = 0, startOffset = 0, lastY = 0, lastTime = 0, velocity = 0;
+  let isDragging = false;
+
+  function onStart(e) {
+    isDragging = true;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    startY = y;
+    lastY = y;
+    lastTime = Date.now();
+    startOffset = offset;
+    velocity = 0;
+    list.style.transition = 'none';
+  }
+
+  function onMove(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const now = Date.now();
+    const dt = now - lastTime;
+    if (dt > 0) velocity = (y - lastY) / dt;
+    lastY = y;
+    lastTime = now;
+    offset = startOffset + (y - startY);
+
+    // Clamp with rubber band
+    const maxOffset = padding;
+    const minOffset = -((totalItems - 1) * itemH) + padding;
+    if (offset > maxOffset) offset = maxOffset + (offset - maxOffset) * 0.3;
+    if (offset < minOffset) offset = minOffset + (offset - minOffset) * 0.3;
+
+    list.style.transform = `translateY(${offset}px)`;
+  }
+
+  function onEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+
+    // Inertia
+    const inertia = velocity * 150;
+    offset += inertia;
+
+    const maxOffset = padding;
+    const minOffset = -((totalItems - 1) * itemH) + padding;
+    offset = Math.max(minOffset, Math.min(maxOffset, offset));
+
+    snapToNearest();
+  }
+
+  container.addEventListener('touchstart', onStart, { passive: true });
+  container.addEventListener('touchmove', onMove, { passive: false });
+  container.addEventListener('touchend', onEnd);
+  container.addEventListener('mousedown', onStart);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onEnd);
+
+  // Initial position
+  updatePosition(false);
+}
+
+// ── Measurement Flow ──
+function startCountdown(onComplete) {
+  let count = COUNTDOWN_DURATION;
+  const numEl = $('countdownNumber');
+  const labelEl = $('countdownLabel');
+
+  numEl.classList.add('visible');
+  labelEl.textContent = '準備してください';
+  numEl.textContent = count;
+  numEl.style.fontSize = '100px';
+
+  countdownTimer = setInterval(() => {
+    count--;
+    if (count <= 0) {
+      clearInterval(countdownTimer);
+      numEl.classList.remove('visible');
+      labelEl.textContent = '';
+      onComplete();
+    } else {
+      numEl.textContent = count;
+    }
+  }, 1000);
+}
+
+function startMeasuring(isSide) {
+  measurePhase = isSide ? 'side-measuring' : 'measuring';
+  $('statusBadge').textContent = '計測中';
+  $('statusBadge').className = 'status-badge recording';
+  $('measureControls').style.display = 'none';
+  $('measureProgress').style.display = 'block';
+
+  const numEl = $('countdownNumber');
+  const labelEl = $('countdownLabel');
+  numEl.style.fontSize = '120px';
+  numEl.classList.add('visible');
+  labelEl.textContent = '計測中';
+
+  let remaining = MEASURE_DURATION;
+  numEl.textContent = remaining;
+  measureStartTime = performance.now();
+
+  countdownTimer = setInterval(() => {
+    remaining--;
+    const elapsed = MEASURE_DURATION - remaining;
+    $('measureProgressBar').style.width = `${(elapsed / MEASURE_DURATION) * 100}%`;
+
+    if (remaining <= 0) {
+      clearInterval(countdownTimer);
+      numEl.classList.remove('visible');
+      labelEl.textContent = '';
+      $('measureProgress').style.display = 'none';
+
+      if (appMode === 'thorough' && !isSide) {
+        // Switch to side measurement
+        measurePhase = 'side-switch';
+        showSideSwitch();
+      } else {
+        // Done
+        measurePhase = 'done';
+        finishMeasurement();
+      }
+    } else {
+      numEl.textContent = remaining;
+    }
+  }, 1000);
+}
+
+function showSideSwitch() {
+  const overlay = $('sideSwitchOverlay');
+  const sideText = selectedSide === 'left' ? '左側面' : '右側面';
+  $('sideSwitchText').textContent = `カメラを移動して、${sideText}が映るようにしてください`;
+  overlay.classList.add('visible');
+}
+
+function startSidePosition() {
+  $('sideSwitchOverlay').classList.remove('visible');
+  measurePhase = 'side-position';
+  emaLandmarks = null; // Reset EMA for new angle
+  $('statusBadge').textContent = '側面 準備中';
+  $('statusBadge').className = 'status-badge loading';
+  $('measureControls').style.display = 'flex';
+  $('btnBeginMeasure').disabled = true;
+  $('btnBeginMeasure').textContent = '側面計測開始';
+}
+
+function beginMeasure() {
+  if (measurePhase === 'position') {
+    measurePhase = 'countdown';
+    $('measureControls').style.display = 'none';
+    startCountdown(() => startMeasuring(false));
+  } else if (measurePhase === 'side-position') {
+    measurePhase = 'side-countdown';
+    $('measureControls').style.display = 'none';
+    startCountdown(() => startMeasuring(true));
+  }
+}
+
+function finishMeasurement() {
+  isDetecting = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  showExportScreen();
+}
+
+// ── Export Screen ──
+function showExportScreen() {
+  const totalFrames = frontFrames.length + sideFrames.length;
+  const metricCount = appMode === 'thorough'
+    ? FRONT_METRIC_KEYS.length + SIDE_METRIC_KEYS.length
+    : FRONT_METRIC_KEYS.length;
+
+  // Calculate average FPS
+  let avgFps = 0;
+  if (frontFrames.length >= 2) {
+    const duration = (frontFrames[frontFrames.length - 1].timestamp - frontFrames[0].timestamp) / 1000;
+    avgFps = duration > 0 ? Math.round(frontFrames.length / duration) : 0;
+  }
+
+  $('exportSummaryText').textContent =
+    (appMode === 'simple' ? '簡易モード' : 'しっかりモード') + `・${MEASURE_DURATION}秒間`;
+  $('statFrames').textContent = totalFrames;
+  $('statMetrics').textContent = metricCount;
+  $('statFps').textContent = avgFps;
+
+  navigateTo('export');
+}
+
+// ── TXT Generation ──
+function generateTxt(detailed) {
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 19);
+  const visRange = detectVisibleRange(frontFrames);
+
+  let txt = '';
+
+  // [header]
+  txt += '[header]\n';
+  txt += `app: PostureData\n`;
+  txt += `version: 1.0\n`;
+  txt += `date: ${dateStr}\n`;
+  txt += `mode: ${appMode}\n`;
+  txt += `duration_sec: ${MEASURE_DURATION}\n`;
+  txt += `fps: ${currentFps}\n`;
+  txt += `total_frames: ${frontFrames.length + sideFrames.length}\n`;
+  txt += `height_cm: ${selectedHeight}\n`;
+  txt += `visible_range: ${visRange}\n`;
+  if (appMode === 'thorough') {
+    txt += `side_view: ${selectedSide}\n`;
+    txt += `side_frames: ${sideFrames.length}\n`;
+  }
+  txt += '\n';
+
+  // [front_metrics_summary]
+  txt += '[front_metrics_summary]\n';
+  for (const key of FRONT_METRIC_KEYS) {
+    const values = frontFrames.map(f => f.metrics[key]).filter(v => v !== null && v !== undefined);
+    if (values.length === 0) continue;
+    const s = calcStats(values);
+    txt += `${key}: avg=${s.avg} sd=${s.sd} min=${s.min} max=${s.max}\n`;
+  }
+  txt += '\n';
+
+  // [side_metrics_summary] (thorough only)
+  if (appMode === 'thorough' && sideFrames.length > 0) {
+    txt += '[side_metrics_summary]\n';
+    for (const key of SIDE_METRIC_KEYS) {
+      const values = sideFrames.map(f => f.metrics[key]).filter(v => v !== null && v !== undefined);
+      if (values.length === 0) continue;
+      const s = calcStats(values);
+      txt += `${key}: avg=${s.avg} sd=${s.sd} min=${s.min} max=${s.max}\n`;
+    }
+    txt += '\n';
+  }
+
+  // [landmark_confidence]
+  txt += '[landmark_confidence]\n';
+  for (const name of TRACKED_NAMES) {
+    const data = confidenceAccum[name];
+    if (!data || data.vis.length === 0) continue;
+    const avgVis = (data.vis.reduce((a, b) => a + b, 0) / data.vis.length).toFixed(2);
+    const avgPres = (data.pres.reduce((a, b) => a + b, 0) / data.pres.length).toFixed(2);
+    txt += `${name}: visibility=${avgVis} presence=${avgPres}\n`;
+  }
+  txt += '\n';
+
+  // [analysis_hints]
+  txt += ANALYSIS_HINTS;
+  txt += '\n';
+
+  // [references]
+  txt += REFERENCES;
+  txt += '\n';
+
+  // Detailed: frame data
+  if (detailed) {
+    txt += generateFrameDataSection('front', frontFrames, FRONT_METRIC_KEYS);
+    if (appMode === 'thorough' && sideFrames.length > 0) {
+      txt += generateFrameDataSection('side', sideFrames, SIDE_METRIC_KEYS);
+    }
+  }
+
+  return txt;
+}
+
+function generateFrameDataSection(prefix, frames, metricKeys) {
+  if (frames.length === 0) return '';
+
+  // Header row
+  const coordCols = TRACKED_NAMES.flatMap(n => [`${n}_x`, `${n}_y`, `${n}_z`]);
+  const header = ['frame', 'timestamp', ...coordCols, ...metricKeys].join(',');
+
+  let section = `[${prefix}_frame_data]\n`;
+  section += header + '\n';
+
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i];
+    const row = [i, ((f.timestamp - frames[0].timestamp) / 1000).toFixed(3)];
+
+    // Landmark coordinates
+    for (const lm of f.landmarks) {
+      row.push(lm.x, lm.y, lm.z);
+    }
+
+    // Metrics
+    for (const key of metricKeys) {
+      const v = f.metrics[key];
+      row.push(v !== null && v !== undefined ? (+v).toFixed(1) : '');
+    }
+
+    section += row.join(',') + '\n';
+  }
+
+  section += '\n';
+  return section;
+}
+
+function downloadTxt(content, filename) {
+  const blob = new Blob([content], { type: 'text/plain; charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function getExportFilename(detailed) {
+  const now = new Date();
+  const d = now.toISOString().slice(0, 10);
+  const t = now.toTimeString().slice(0, 5).replace(':', '');
+  return `posture_${d}_${t}${detailed ? '_detail' : ''}.txt`;
+}
+
+// ── Event Handlers ──
+function setupEventHandlers() {
+  // Mode selection
+  $('btnSimple').addEventListener('click', () => {
+    appMode = 'simple';
+    $('sideSelectionCard').style.display = 'none';
+    navigateTo('settings');
+  });
+  $('btnThorough').addEventListener('click', () => {
+    appMode = 'thorough';
+    $('sideSelectionCard').style.display = 'block';
+    navigateTo('settings');
+  });
+
+  // Side selection
+  $('btnSideLeft').addEventListener('click', () => {
+    selectedSide = 'left';
+    $('sideSegment').classList.remove('right');
+    $('btnSideLeft').classList.add('active');
+    $('btnSideRight').classList.remove('active');
+    $('sideDescText').textContent = 'スクロール（楽器の渦巻き）側。指板腕の肘角度・手首の形、楽器の構え角度がよく見えます';
+  });
+  $('btnSideRight').addEventListener('click', () => {
+    selectedSide = 'right';
+    $('sideSegment').classList.add('right');
+    $('btnSideRight').classList.add('active');
+    $('btnSideLeft').classList.remove('active');
+    $('sideDescText').textContent = '弓腕側。弓の軌道、肘の開き、手首の返しがよく見えます';
+  });
+
+  // Start measurement
+  $('btnStartMeasure').addEventListener('click', async () => {
+    navigateTo('measure');
+    frontFrames = [];
+    sideFrames = [];
+    confidenceAccum = {};
+    emaLandmarks = null;
+    measurePhase = 'position';
+
+    $('statusBadge').textContent = '準備中';
+    $('statusBadge').className = 'status-badge loading';
+    $('measureControls').style.display = 'flex';
+    $('btnBeginMeasure').disabled = true;
+    $('btnBeginMeasure').textContent = '計測開始';
+
+    await startCamera();
+    isDetecting = true;
+    lastVideoTime = -1;
+    frameCount = 0;
+    fpsTime = performance.now();
+    detectLoop();
+
+    // Update status once camera is ready
+    setTimeout(() => {
+      $('statusBadge').textContent = 'ポジション確認';
+      $('statusBadge').className = 'status-badge ready';
+    }, 500);
+  });
+
+  // Begin measure button (inside measure screen)
+  $('btnBeginMeasure').addEventListener('click', beginMeasure);
+
+  // Side switch ready
+  $('btnSideReady').addEventListener('click', startSidePosition);
+
+  // Camera toggle
+  $('btnCameraToggle').addEventListener('click', async () => {
+    facingMode = facingMode === 'user' ? 'environment' : 'user';
+    await startCamera();
+  });
+
+  // Export buttons
+  $('btnExportSimple').addEventListener('click', () => {
+    const txt = generateTxt(false);
+    downloadTxt(txt, getExportFilename(false));
+  });
+  $('btnExportDetail').addEventListener('click', () => {
+    const txt = generateTxt(true);
+    downloadTxt(txt, getExportFilename(true));
+  });
+
+  // Retry
+  $('btnRetry').addEventListener('click', () => {
+    frontFrames = [];
+    sideFrames = [];
+    confidenceAccum = {};
+    emaLandmarks = null;
+    measurePhase = 'idle';
+    navigateTo('mode');
+  });
+}
+
+// ── Hardcoded Analysis Hints ──
+const ANALYSIS_HINTS = `[analysis_hints]
+- SD値が低すぎる指標は「硬い・緊張している」サインの可能性がある（姿勢拘束が音質劣化を招く: Shan & Visentin 2010）
+- 個人間変動は大きい（13.1°）が個人内変動は小さい（4.2°）。絶対値より個人のベースラインからのズレで判断すべき
+- 楽器角度の微調整（数度）で肩挙上が劇的に改善する場合がある（22.5mm→4.8mm: Adjusted chinrest height study）
+- 前半と後半のフレームデータを比較すると、15秒間の姿勢ドリフト（疲労・緊張）を検出できる
+- 弓腕の肘角度の振幅（max-min）はボーイングの弓幅を反映する
+- 肩のy座標の周期的振動から呼吸パターン（深さ・頻度）を推定できる可能性がある
+- 頭部の動きと左肩の動きの相関が高い場合、顎で楽器を過度に挟んでいる可能性がある
+- 指標間の相関（例: 頭部傾斜↔肩挙上）は代償運動パターンを示唆する
+- 子どもの姿勢データは成人の基準値で判断してはならない（運動発達段階が異なる: Hiemstra & Sadakata 2024）
+- 9-13歳の若年演奏者の71%が演奏関連の痛みを報告している（Gembris et al. 2020）
+`;
+
+// ── Hardcoded References ──
+const REFERENCES = `[references]
+- Kok LM et al. (2016) "A useful approach to identify profiles of playing-related musculoskeletal disorders" https://doi.org/10.1016/j.msksp.2015.12.005
+- Steinmetz A et al. (2015) "Playing-related musculoskeletal disorders in music students" https://doi.org/10.1093/occmed/kqu178
+- Chan C et al. (2014) "Evidence-based practice for musculoskeletal disorders in musicians" https://doi.org/10.1179/2042618613Y.0000000028
+- Woldendorp KH et al. (2021) "Neuromotor mechanisms behind playing-related disorders" https://doi.org/10.1016/j.mehy.2021.110526
+- Moraes GFS & Papini AL (2012) "Spinal curvatures and trunk asymmetry in violinists" https://doi.org/10.3233/BMR-2012-0345
+- Mann S et al. (2023) "Biomechanical study of ergonomic chinrest" https://doi.org/10.1038/s41598-023-45327-7
+- Shan G & Visentin P (2010) "Movement quality in violin performance" https://doi.org/10.1016/j.humov.2010.05.005
+- Tondini et al. (2022) "Right glenohumeral joint forces in violin playing" https://doi.org/10.1016/j.clinbiomech.2022.105645
+- Schoonderwaldt E & Altenmüller E (2015) "Position shifts in violin playing" https://doi.org/10.1016/j.gaitpost.2015.04.011
+- Kok LM et al. (2013) "Playing-related musculoskeletal disorders in violinists: systematic review" https://doi.org/10.1016/j.msksp.2012.12.005
+- Fjellman-Wiklund A & Chesky K (2006) "Musculoskeletal and general health problems of acoustic guitar, electric guitar, electric bass, and drum players" https://doi.org/10.1017/S1049023X00009997
+- Nyman T et al. (2007) "Work-related musculoskeletal disorders in music teachers" https://doi.org/10.1016/j.msksp.2007.06.002
+- Ackermann BJ et al. (2012) "Muscle and tendon responses to performing arts" https://doi.org/10.3357/ASEM.3192.2012
+- Baadjou VAE et al. (2016) "Playing the clarinet: influence of body posture on muscle activity" https://doi.org/10.1177/0305735616629120
+- de Greef M et al. (2003) "Musical activities and their relationship to compliance with preventive measures in string players" https://doi.org/10.3233/WOR-2003-21312
+- Kuo WY et al. (2024) "Automated violin bowing recognition" https://doi.org/10.1109/TMM.2024.3355637
+- Zollner T et al. (2023) "Real-time posture feedback for musicians using computer vision"
+- Bazgir O et al. (2018) "Activity recognition with MediaPipe" https://doi.org/10.1109/BioSMART.2018.8575058
+- Lee SH et al. (2023) "Human pose estimation: survey and benchmark" https://doi.org/10.1016/j.cviu.2023.103704
+- Colyer SL et al. (2018) "A review of the evolution of vision-based motion analysis" https://doi.org/10.1080/02640414.2018.1432221
+- Wade L et al. (2022) "Applications and limitations of markerless motion capture" https://doi.org/10.1007/s12283-022-00369-2
+- McAtamney L & Corlett EN (1993) "RULA: a survey method for the investigation of work-related upper limb disorders" https://doi.org/10.1016/0003-6870(93)90080-S
+- Hignett S & McAtamney L (2000) "REBA: Rapid Entire Body Assessment" https://doi.org/10.1016/S0003-6870(99)00039-3
+- Li L et al. (2022) "Automatic RULA assessment via MediaPipe" https://doi.org/10.3390/app12105094
+- Jiang Y et al. (2023) "SkeletonNet: a GCN approach for skeleton-based action recognition" https://doi.org/10.1016/j.patcog.2023.109400
+- Duan H et al. (2022) "Revisiting skeleton-based action recognition" https://doi.org/10.1109/CVPR52688.2022.00298
+- D'Orazio T et al. (2009) "Investigation of posture for healthy violin playing" https://doi.org/10.1016/j.gaitpost.2008.08.006
+- Stanhope J (2020) "Physical performance demands of violin playing: a scoping review"
+- Ackermann BJ & Adams R (2004) "Perceptions of causes and risk factors for injury" https://doi.org/10.1016/j.msksp.2004.08.001
+- Gasenzer ER & Parncutt R (2019) "How do musicians reduce playing-related disorders?" https://doi.org/10.1016/j.apmr.2019.02.013
+- Ranelli S et al. (2011) "Prevalence of playing-related musculoskeletal disorders in children" https://doi.org/10.1016/j.msksp.2010.09.004
+- Lee HS et al. (2012) "Musicians' medicine: musculoskeletal problems in string players" https://doi.org/10.3346/jkms.2012.27.3.226
+- Kaufman-Cohen Y & Ratzon NZ (2011) "Correlation between risk factors and musculoskeletal disorders among instrumental musicians" https://doi.org/10.1016/j.msksp.2011.02.004
+- Edling CW & Nordin M (2023) "Occupational and leisure-time physical activity in musicians"
+- Lamontagne V & Bhérer L (2016) "Motor sequence learning and fatigue in musicians"
+- Fujii S & Schlaug G (2013) "The Harvard Beat Assessment Test: a battery of beat-based rhythm" https://doi.org/10.1371/journal.pone.0067906
+- Visentin P & Shan G (2003) "Kinematic analysis of violin playing" https://doi.org/10.1017/S0950268103001610
+- Kelleher LK et al. (2013) "Biomechanical research in violin and viola performance" https://doi.org/10.1177/0305735613490533
+- Turner-Stokes L & Reid K (1999) "Three-dimensional motion analysis of upper limb movement in the bowing arm of string-playing musicians" https://doi.org/10.1016/S0268-0033(99)00012-X
+- McCrary JM et al. (2021) "A systematic review and meta-analysis of the effects of music performance on pain" https://doi.org/10.1016/j.neubiorev.2021.01.015
+- Gembris H et al. (2020) "High-Performing Young Musicians' Playing-Related Pain" https://doi.org/10.3389/fpsyg.2020.564736
+- Hiemstra A & Sadakata M (2024) "Examining the Interaction Between Motor Development and Early Violin Learning" String Research Journal 14(1)
+- Carroll L (2020) "The Unique Demands of Playing Posture on Youth Violinists and Violists" University of Nebraska-Lincoln Honors Thesis
+- Latreche A et al. (2023) "Reliability and validity analysis of MediaPipe-based measurement system" https://doi.org/10.1016/j.measurement.2023.112826
+- Dill S et al. (2023) "Accuracy Evaluation of 3D Pose Estimation with MediaPipe Pose" CDBME 2023
+- Baadjou VAE et al. (2023) "Factors associated with increased risk of playing-related disorders" https://doi.org/10.1038/s41598-023-22834-2
+- Kecelioglu S et al. (2025) "Investigation of the performance's effects on PRMP" WORK 80(1)
+- Afshari D et al. (2024) "Effects of E-learning for Postural Education in Music Students" MPPA 39(3)
+- Saffert AS et al. (2022) "Biomechanical analysis of the right elevated glenohumeral joint" Technology and Health Care 30(S1): 419-429
+`;
+
+// ── Init ──
+setupEventHandlers();
+initWheelPicker();
+initMediaPipe();
+</script>
+</body>
+</html>
